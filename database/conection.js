@@ -2,7 +2,7 @@ const mysql = require('mysql')
 
 const mysqlConenction = mysql.createConnection({
     host: "localhost",
-    database: 'users',
+    database: 'waterOS',
     user: "root",
     password: ""
 })
