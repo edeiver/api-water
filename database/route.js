@@ -2,6 +2,9 @@ const mysql = require('./conection');
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken')
+require('dotenv').config()
+
 
 
 
@@ -39,6 +42,44 @@ router.post('/register', async (req, res) => {
 })
 
 /**
+ * generate token
+ */
+const generateToken = (user) => {
+    return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '20m'})
+}
+
+/**
+ * autenticar token 
+ */
+const authenticateToken = (req, res, next) => {
+    const AUTH_HEADER = req.headers['authorization']
+    const token = AUTH_HEADER &&  AUTH_HEADER.split(' ')[1]
+    if (token === null) return res.sendStatus(401)
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, user ) => {
+    if (error) {
+        return res.sendStatus(403)
+    }
+    console.log(req.user);
+        req.user = user
+        next()
+    })
+}
+/**
+ * app token
+ */
+router.post('/token', async (req, res) => {
+    const refresh_token = req.body.token
+    if (refresh_token === null) return res.sendStatus(401)
+    if (!refresh_token) return res.sendStatus(401)
+    jwt.verify(refresh_token, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
+        if (err) return res.sendStatus(401)
+        const access_token = generateToken({email : user.email})
+        res.json({access_token})
+    })
+
+})
+
+/**
  * login
  */
 router.post('/login', async (req, res) => {
@@ -50,11 +91,19 @@ router.post('/login', async (req, res) => {
             console.log('results: ',results[0].password);
             try {
                 const comparePass= await bcrypt.compare(password, results[0].password)
+            
                 if (comparePass) {
+                    const { password, email} = results[0]
+                    const user = { password, email}
+                    //const access_token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET) 
+                    const access_token = generateToken(user)
+                    const refresh_token = jwt.sign(user, process.env.REFRESH_TOKEN_SECRET) 
                     res.json({status: 201, error: false, rows: {
                         id: results[0].id,
                         name: results[0].name,
-                        email: results[0].email
+                        email: results[0].email,
+                        access_token,
+                        refresh_token
                     }})
                 } else {
                     res.json({status: 401, error: true, errorMjs: 'credenciales invalidas'})
@@ -90,7 +139,7 @@ router.post('/createCourse', async (req, res) => {
 /**
  * get course list
  */
-router.get('/courseList', async (req, res) => {
+router.get('/courseList', /* authenticateToken, */ async (req, res) => {
     const query = 'SELECT * FROM course'
     //se busca el correo
     mysql.query(query, async (error, results, fields) => {
